@@ -1,0 +1,87 @@
+version: '3.9'
+
+services:
+  # ── Database ────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: quantai-postgres
+    environment:
+      POSTGRES_USER: quantai
+      POSTGRES_PASSWORD: quantai_secret
+      POSTGRES_DB: quantai_db
+    ports: ["5432:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantai"]
+      interval: 10s; timeout: 5s; retries: 5
+
+  # ── Redis ────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: quantai-redis
+    ports: ["6379:6379"]
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s; timeout: 5s; retries: 5
+
+  # ── Backend ──────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.backend
+    container_name: quantai-backend
+    env_file: .env
+    ports: ["8000:8000"]
+    volumes:
+      - ./ml/registry:/app/ml/registry
+      - ./data:/app/data
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.frontend
+    container_name: quantai-frontend
+    ports: ["3000:80"]
+    depends_on: [backend]
+    restart: unless-stopped
+
+  # ── MLflow ───────────────────────────────────────────────────────
+  mlflow:
+    image: python:3.11-slim
+    container_name: quantai-mlflow
+    command: >
+      bash -c "pip install mlflow psycopg2-binary boto3 -q &&
+               mlflow server --host 0.0.0.0 --port 5000
+               --backend-store-uri postgresql://quantai:quantai_secret@postgres/mlflow
+               --default-artifact-root /mlruns"
+    ports: ["5000:5000"]
+    volumes: [mlflow_data:/mlruns]
+    depends_on: [postgres]
+
+  # ── Celery Worker ────────────────────────────────────────────────
+  celery:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.backend
+    container_name: quantai-celery
+    command: celery -A app.worker worker --loglevel=info --concurrency=4
+    env_file: .env
+    depends_on: [redis, postgres]
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  mlflow_data:
+
+networks:
+  default:
+    name: quantai-network
