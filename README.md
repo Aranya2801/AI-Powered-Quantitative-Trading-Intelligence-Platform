@@ -4,7 +4,6 @@
 
 ### AI-Powered Quantitative Trading Intelligence Platform
 
-[![CI Pipeline](https://github.com/quantai/quantai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/quantai/quantai-platform/actions)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![React 18](https://img.shields.io/badge/react-18-61dafb.svg)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/fastapi-0.111-009688.svg)](https://fastapi.tiangolo.com)
